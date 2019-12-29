@@ -16,6 +16,10 @@ type 1 is histogram
 
 type 2 is a style mimic AE effects
 
+## type2 exmpale
+
+For case the code not running, examples uploaded to `/example/`.
+
 ## beyond PJ
 
 以下内容不属于PJ
