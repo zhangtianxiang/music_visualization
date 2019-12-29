@@ -411,7 +411,9 @@ window.onload = function () {
     /* init canvas and configs */
     init_func()
     /* init audio */
-    audioCtx = new AudioContext()
+    audioCtx = new AudioContext({
+        sampleRate: 96000,
+    })
     analyserNode = audioCtx.createAnalyser()
     analyserNode.fftSize = fft_size * 2
     analyserNode.smoothingTimeConstant = smooth
