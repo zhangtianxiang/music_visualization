@@ -107,7 +107,8 @@ let pbar_w = 200
 let style_bar1 = 'rgba(72, 226, 251, 0.8)'
 let style_bar2 = 'rgba(72, 226, 251, 1)'
 let style_blr = 'rgba(0, 0, 0, 0.2)'
-let ext = 4 // 每个外圈柱子都向前向后扩展2个，即1->5
+let ext = 2 // 每个外圈柱子都向前向后扩展2个，即1->5
+let csp = 4 // 两个数值之间插值4个
 let outer_bar_d = 3
 
 let init_circle = function () {
@@ -122,7 +123,8 @@ let init_circle = function () {
     height = 1080
 
     cir_r = 400
-    cir_d = 250
+    // cir_d = 250
+    cir_d = 700
     poi_d = 250
     cir_x = 960
     cir_y = 540
@@ -160,11 +162,73 @@ let render_outer = function (dataArray) {
 }
 */
 
+let strip = function (x, min_x, max_x) {
+    return x < min_x ? min_x : (x > max_x ? max_x : x)
+}
+
+let cspline = function (dataArray) {
+    let xs = []
+    let ys = []
+    let ks = []
+    // 离的太远，太平滑了，需要对x压缩
+    for (let i = 0; i < dataArray.length; i++) {
+        xs[i] = i * (csp + 1)
+        ys[i] = dataArray[i]
+        ks[i] = 1
+    }
+    CSPL.getNaturalKs(xs, ys, ks)
+    let total = (dataArray.length - 1) * (csp + 1) + 1
+    let ret = []
+    for (let i = 0; i < total; i++) { // 这里不应该超过dataArray中的最大值
+        ret.push(strip(CSPL.evalSpline(i, xs, ys, ks), 0, cir_d*1.5))
+    }
+    return ret
+}
+
 let render_outer = function (dataArray) {
     canvasCtx.beginPath()
     canvasCtx.lineWidth = outer_bar_d
-    let parts = (ext * 2 + 1)
-    let part_d = 1 / parts
+    let y = []
+    let exp_p = 10
+    max_exp = Math.exp(exp_p)-1
+    for (let i = outer_begin; i <= outer_end; i++) {
+        let value = dataArray[i] // 0~255
+        value = Math.exp(value * exp_p / 255) - 1
+        value = value * cir_d / max_exp
+        /*if (value <= hold_outer) value = 0 // 过滤掉音量较小的情况
+        else {
+            value -= hold_outer
+            value = value * 2 / (255 - hold_outer)
+            // 为了实现音量较大条较长，而非简单的线性增加，设置为一个exp函数
+            value = Math.exp(value)-1
+            value = value * cir_d / max_exp
+            // value = value * cir_d / (255 - hold_outer)
+        }*/
+        y.push(value)
+    }
+    let ys = cspline(y)
+    // let ys = y
+    real_total = ys.length
+    for (let i = 0; i < real_total; i++) {
+        let value = ys[i]
+        /* 从-90°到90°，-1/2 PI ~ 1/2 PI */
+        let ang = (i + 0.5) * Math.PI / real_total
+        let x = Math.sin(ang)
+        let y = Math.cos(ang)
+        canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
+        canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
+        canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
+        canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
+    }
+    canvasCtx.strokeStyle = style_outter
+    canvasCtx.closePath()
+    canvasCtx.stroke()
+}
+
+let debug_show = function() {
+    let dataArray = new Uint8Array(analyserNode.frequencyBinCount)
+    analyserNode.getByteFrequencyData(dataArray)
+    let y = []
 
     for (let i = outer_begin; i <= outer_end; i++) {
         let value = dataArray[i] // 0~255
@@ -173,58 +237,78 @@ let render_outer = function (dataArray) {
             value -= hold_outer
             value = value * cir_d / (255 - hold_outer)
         }
-        dataArray[i] = value
+        y.push(value)
     }
-    for (let i = outer_begin; i <= outer_end; i++) {
-        let value = dataArray[i]
-        /* 从-90°到90°，-1/2 PI ~ 1/2 PI */
-        let ang = (i - outer_begin + 0.5) * Math.PI / outer_cnt
-        let x = Math.sin(ang)
-        let y = Math.cos(ang)
-        canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
-        canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
-        canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
-        canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
-
-        let pre_delta = ((i == outer_begin) ? 0 : ((dataArray[i - 1] - dataArray[i]) / parts))
-        let post_delta = ((i == outer_end) ? 0 : ((dataArray[i + 1] - dataArray[i]) / parts))
-        for (let j = 1; j <= ext; j++) {
-            //? 是否进行平滑处理？
-            // 使用2x作为因子做平滑处理
-            // draw pre
-            ang = (i - outer_begin + 0.5 - (part_d * j)) * Math.PI / outer_cnt
-            x = Math.sin(ang)
-            y = Math.cos(ang)
-            value = dataArray[i]
-            if ((pre_delta > 0 && post_delta > 0) || (pre_delta < 0 && post_delta < 0)) {
-                value = value + pre_delta * j * (2 * part_d * j)
-            } else {
-                value = value + pre_delta * j
-            }
-            canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
-            canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
-            canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
-            canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
-            // draw post
-            ang = (i - outer_begin + 0.5 + (part_d * j)) * Math.PI / outer_cnt
-            x = Math.sin(ang)
-            y = Math.cos(ang)
-            value = dataArray[i]
-            if ((pre_delta > 0 && post_delta > 0) || (pre_delta < 0 && post_delta < 0)) {
-                value = value + post_delta * j * (2 * part_d * j)
-            } else {
-                value = value + post_delta * j
-            }
-            canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
-            canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
-            canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
-            canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
-        }
-    }
-    canvasCtx.strokeStyle = style_outter
-    canvasCtx.closePath()
-    canvasCtx.stroke()
+    console.log(y)
+    let ys = cspline(y)
+    console.log(ys)
 }
+
+// let render_outer = function (dataArray) {
+//     canvasCtx.beginPath()
+//     canvasCtx.lineWidth = outer_bar_d
+//     let parts = (ext * 2 + 1)
+//     let part_d = 1 / parts
+
+//     for (let i = outer_begin; i <= outer_end; i++) {
+//         let value = dataArray[i] // 0~255
+//         if (value <= hold_outer) value = 0 // 过滤掉音量较小的情况
+//         else {
+//             value -= hold_outer
+//             value = value * cir_d / (255 - hold_outer)
+//         }
+//         dataArray[i] = value
+//     }
+//     for (let i = outer_begin; i <= outer_end; i++) {
+//         let value = dataArray[i]
+//         /* 从-90°到90°，-1/2 PI ~ 1/2 PI */
+//         let ang = (i - outer_begin + 0.5) * Math.PI / outer_cnt
+//         let x = Math.sin(ang)
+//         let y = Math.cos(ang)
+//         canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
+//         canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
+//         canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
+//         canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
+
+//         let pre_delta = ((i == outer_begin) ? 0 : ((dataArray[i - 1] - dataArray[i]) / parts))
+//         let post_delta = ((i == outer_end) ? 0 : ((dataArray[i + 1] - dataArray[i]) / parts))
+//         for (let j = 1; j <= ext; j++) {
+//             //? 是否进行平滑处理？
+//             // 使用2x作为因子做平滑处理
+//             // draw pre
+//             ang = (i - outer_begin + 0.5 - (part_d * j)) * Math.PI / outer_cnt
+//             x = Math.sin(ang)
+//             y = Math.cos(ang)
+//             value = dataArray[i]
+//             if ((pre_delta > 0 && post_delta > 0) || (pre_delta < 0 && post_delta < 0)) {
+//                 value = value + pre_delta * j * (2 * part_d * j)
+//             } else {
+//                 value = value + pre_delta * j
+//             }
+//             canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
+//             canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
+//             canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
+//             canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
+//             // draw post
+//             ang = (i - outer_begin + 0.5 + (part_d * j)) * Math.PI / outer_cnt
+//             x = Math.sin(ang)
+//             y = Math.cos(ang)
+//             value = dataArray[i]
+//             if ((pre_delta > 0 && post_delta > 0) || (pre_delta < 0 && post_delta < 0)) {
+//                 value = value + post_delta * j * (2 * part_d * j)
+//             } else {
+//                 value = value + post_delta * j
+//             }
+//             canvasCtx.moveTo(cir_x + x * cir_r, cir_y + y * cir_r)
+//             canvasCtx.lineTo(cir_x + x * (cir_r + value), cir_y + y * (cir_r + value))
+//             canvasCtx.moveTo(cir_x - x * cir_r, cir_y + y * cir_r)
+//             canvasCtx.lineTo(cir_x - x * (cir_r + value), cir_y + y * (cir_r + value))
+//         }
+//     }
+//     canvasCtx.strokeStyle = style_outter
+//     canvasCtx.closePath()
+//     canvasCtx.stroke()
+// }
 
 let render_inner = function (dataArray) {
     canvasCtx.beginPath()

@@ -31,3 +31,15 @@ type2将120HZ内的频率以外圈圆形柱形图展示，12HZ到2000HZ左右的
 写音乐可视化是一个非常早的想法，大概四年前就层使用AE的一个特效来实现音乐可视化，但是以前技术不太成熟没法做成js的，之后一直在搁置。之所以使用HTML+js，是因为并不是要做可视化音乐播放器，而是纯粹的给定音乐可以将其可视化，用于录制视频等功能。
 
 现在的type2基本图形已经绘制好了，还有一些小bug需要调试，如：外圈长度设置较大时会显示错乱，不同浏览器提供的AudioContext里的AnalyzerNode的采样率不同，对IE的适配等。导致显示效果变差。还有一些参数设置应该转移到页面上来，还有UI界面的美化。等之后可以考虑搭配一个后端部署到自己的服务器上去。
+
+## thanks
+
+感激kuckir的CSPL库，因为网页解析到的低频率的值比较稀疏，只有三十多个，要贴满外圈必须要插值，设想的是三次样条插值，但是自己写有点搞，幸好有人做了这个事情。现在就差重构代码，改进用户交互UI了。
+
+Thanks for kuckir's CSPL:
+
+http://blog.ivank.net/interpolation-with-cubic-splines.html
+
+https://github.com/kuckir/CSPL.js
+
+之后会改为submodule
