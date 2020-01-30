@@ -1,4 +1,4 @@
-# music_visualization
+# music_visualizer
 
 ## github_page
 
