@@ -1,5 +1,9 @@
 # music_visualization
 
+## github_page
+
+尝试将可视化程序制作成为react应用，并使用github_page部署，后期将可视化核心拆出后拆分为子模块。
+
 ## usage
 
 clone the project, then open `index.html`, choose a music file to play
